@@ -1,54 +1,47 @@
-import streamlit as st
 import json
+from pathlib import Path
+import streamlit as st
+from st_supabase_connection import SupabaseConnection
+
+conn = st.connection("supabase", type=SupabaseConnection)
+
+def get_last_state(pseudo):
+    result = conn.client.table("evaluations") \
+        .select("task_id") \
+        .eq("pseudo", pseudo) \
+        .execute()
+    if not result.data:
+        return 0
+    return max(r["task_id"] for r in result.data) + 1
 
 st.header("Plateforme d'Évaluation de Documents")
 
-# Fichier pour stocker les pseudos
-users_file = "./users.json"
+def load_json(path, default):
+    if path.exists():
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return default
 
-# Fonctions pour la connexion / création des utilisateurs
-def load_users():
-    """ Charger les pseudos existants """
-    with open(users_file, "r") as f:
-        content = f.read()
-        return json.loads(content)
+def save_json(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def save_users(users):
-    """ Sauvegarder les pseudos """
-    with open(users_file, "w") as f:
-        json.dump(users, f)
-
-# Afficher le contenu
 with st.container():
-    # Consignes
     st.subheader("Consignes")
     st.markdown("""
-    - **Évaluation :** à chaque étape, vous évaluerez le premier document retourné par deux modèles.
-    - **Notes :** pour chaque document, vous attribuerez une note de 1 à 5 en fonction de sa pertinence par rapport à la requête.
-    - **Reprise :** pour reprendre votre progression plus tard, entrez exactement le même identifiant en faisant attention aux majuscules et aux espaces.
+    - Évaluez les deux documents pour chaque requête.
+    - Donnez une note de 1 à 5 à chaque document.
+    - Si vous vous reconnectez avec le même pseudo, vous reprenez là où vous vous étiez arrêté.
     """)
     st.divider()
-
-    st.write("Veuillez entrer un pseudo anonyme que vous garderez tout au long de cette évaluation.")
+    st.write("Veuillez entrer un pseudo que vous garderez tout au long de cette évaluation.")
     pseudo = st.text_input("Pseudo")
-    
+
     if st.button("Se connecter / Créer un compte"):
-        if not pseudo:
+        if not pseudo.strip():
             st.error("Veuillez entrer un pseudo")
         else:
-            # Vérifier si l'utilisateur existe
-            users = load_users()
-            
-            if pseudo not in users:
-                # Créer un nouveau compte
-                users.append(pseudo)
-                save_users(users)
-                st.success(f"Compte créé pour {pseudo}!")
-            else:
-                st.success(f"Bienvenue {pseudo}!")
-            
-            # Stocker le pseudo en session
-            st.session_state["pseudo"] = pseudo
-            st.session_state["page"] = "eval"
+            st.session_state["pseudo"] = pseudo.strip()
+            st.session_state["task_id"] = get_last_state(pseudo.strip())
             st.switch_page("page_eval.py")
